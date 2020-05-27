@@ -6,25 +6,26 @@ use Test;
 
 plan 9;
 
-constant DOC-BIN = './bin/p6doc';
+constant DOC-BIN = $*CWD.add('bin/p6doc');
 
 # Copy docs program to temp dir sandbox, since it saves state there
 use File::Temp;
 my $sandbox = tempdir(:unlink).IO;
-my $doc-bin = $sandbox.add(DOC-BIN.IO.basename);
-DOC-BIN.IO.copy($doc-bin);
+my $doc-bin = $sandbox.add(DOC-BIN.basename);
+DOC-BIN.copy($doc-bin);
 
 sub run-doc(*@args, :$interact = False, :$rc = 0) {
     my %env;
-    %env<PAGER> = 'more';
+    # Add -I. so 'doc/' directory is found
+    %env<RAKUDOLIB> = <. lib>.map({ $*CWD.add($_) }).join(',');
     %env<P6DOC_INTERACT> = 1 unless $interact === False;
+    # XXX: This should be fixed in bin/p6doc itself, probably
+    # Avoid hard-coded, non-portable 'less -r' in bin/p6doc
+    %env<PAGER> = 'more';
 
     my $in := $interact ~~ IO::Handle ?? $interact !! so $interact;
 
-    my $proc = run :%env, :$in, :merge,
-        # Use -I. so 'doc/' directory is used
-        $*EXECUTABLE, "-I{$*CWD.add('.')}", "-I{$*CWD.add('lib')}",
-        $doc-bin, |@args;
+    my $proc = run :%env, :$in, :out, $*EXECUTABLE, $doc-bin, |@args;
 
     if $interact {
         if    $interact ~~ Iterable { $proc.in.put($_) for $interact }
